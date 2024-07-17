@@ -1,0 +1,61 @@
+from flask import Flask, jsonify, request
+import pyttsx3
+from datetime import datetime, timedelta
+import threading
+
+app = Flask(_name_)
+
+# In-memory storage for tablet data
+tablets = {}
+
+# Voice engine setup
+engine = pyttsx3.init()
+
+# Function to announce it's time to take a pill
+def voice_reminder(message):
+    engine.say(message)
+    engine.runAndWait()
+
+# Function to schedule reminders
+def schedule_reminders(tablet_name, times):
+    for time in times:
+        now = datetime.now()
+        reminder_time = datetime.strptime(time, "%H:%M")
+        reminder_time = reminder_time.replace(year=now.year, month=now.month, day=now.day)
+        if reminder_time < now:
+            reminder_time += timedelta(days=1)
+        delay = (reminder_time - now).total_seconds()
+        threading.Timer(delay, voice_reminder, [f"Time to take your {tablet_name} pill"]).start()
+
+@app.route('/tablets', methods=['GET'])
+def get_tablets():
+    return jsonify(tablets)
+
+@app.route('/tablets', methods=['POST'])
+def add_tablet():
+    data = request.json
+    name = data['name']
+    intake_times = data['intake_times']
+    schedule = data['schedule']
+    refill_count = data['refill_count']
+    
+    tablets[name] = {
+        'schedule': schedule,
+        'refill_count': refill_count
+    }
+    
+    schedule_reminders(name, schedule)
+    
+    return jsonify({'message': 'Tablet added successfully'}), 201
+
+@app.route('/tablets/<tablet_name>', methods=['PUT'])
+def take_tablet(tablet_name):
+    if tablet_name in tablets:
+        tablets[tablet_name]['refill_count'] -= 1
+        if tablets[tablet_name]['refill_count'] <= 0:
+            voice_reminder(f"Time to refill your {tablet_name} pills")
+        return jsonify({'message': 'Tablet taken successfully'}), 200
+    return jsonify({'message': 'Tablet not found'}), 404
+
+if _name_ == '_main_':
+    app.run(debug=True)
